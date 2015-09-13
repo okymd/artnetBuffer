@@ -5,6 +5,22 @@
 #include "ofxXmlSettings.h"
 #include "ofxGui.h"
 
+
+#define ART_NET_ID "Art-Net\0"
+#define ART_DMX 0x5000
+#define ART_DMX_START 18
+
+
+
+const int ARTNET_PORT = 6454; 
+static const int MAX_NUM_UNIVERSES = 10;
+static const unsigned int MAX_FRAME_NUM = MAX_NUM_UNIVERSES*256;
+static const unsigned int ARTNET_PACKET_SIZE = 530;// Art-net packet size
+static const unsigned int NUM_LEDS = 192;
+static const unsigned int PACKET_SIZE = NUM_LEDS * 3;// for Arduino packet size
+static const int NUM_REMOTE_DEVICES = 5;
+
+
 class ofApp : public ofBaseApp{
 
 	public:
@@ -30,11 +46,7 @@ class ofApp : public ofBaseApp{
 		ofxUDPManager udpSender[5];
 		ofxUDPManager udpReceiver;
 
-		static const int MAX_NUM_UNIVERSES = 10;
-		static const unsigned int MAX_FRAME_NUM = MAX_NUM_UNIVERSES*256;
-		static const unsigned int ARTNET_PACKET_SIZE = 530;// Art-net packet size
-		static const unsigned int NUM_LEDS = 192;
-		static const unsigned int PACKET_SIZE = NUM_LEDS * 3;// for Arduino packet size
+		
 				
 		unsigned int numUniverses;
 		unsigned int maxNumUniverses;

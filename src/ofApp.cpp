@@ -1,14 +1,8 @@
 #include "ofApp.h"
 
 
-#define ART_NET_ID "Art-Net\0"
-#define ART_DMX 0x5000
-#define ART_DMX_START 18
-
-const int ARTNET_PORT = 6454; 
-
 ////Arduino IP's
-const string remoteIP[5] ={
+const string remoteIP[NUM_REMOTE_DEVICES] ={
 	"192.168.1.200",
 	"192.168.1.201",
 	"192.168.1.202",
@@ -40,7 +34,7 @@ void ofApp::setup(){
 
 	//Sender Setup
 
-	for(int i=0;i<5;i<i++){
+	for(int i=0;i<NUM_REMOTE_DEVICES;i<i++){
 		udpSender[i].Create();
 		udpSender[i].Connect(remoteIP[i].c_str(),ARTNET_PORT);
 		udpSender[i].SetNonBlocking(true);
