@@ -25,24 +25,27 @@ void ofApp::setup(){
 
 	//Receiver Setup
 	udpReceiver.Create();
-	udpReceiver.Bind(ARTNET_PORT);
+	if(udpReceiver.Bind(ARTNET_PORT)<0){
+		printf("UDP Error:can't bind\n");
+	};
 	udpReceiver.SetNonBlocking(true);
 
-
-	printf("%d\n",udpReceiver.GetReceiveBufferSize());
-
+	printf("UDP Receive Buffer Size:%d\n",udpReceiver.GetReceiveBufferSize());
 
 	//Sender Setup
-
 	for(int i=0;i<NUM_REMOTE_DEVICES;i<i++){
 		udpSender[i].Create();
-		udpSender[i].Connect(remoteIP[i].c_str(),ARTNET_PORT);
-		udpSender[i].SetNonBlocking(true);
+		if(udpSender[i].Connect(remoteIP[i].c_str(),ARTNET_PORT)){;
+			udpSender[i].SetNonBlocking(true);	
+			printf("UDP Sender[%d] Connected to:%s\n",i,remoteIP[i].c_str());
+		}else{
+			printf("UDP Sender[%d] can't connect to:%s\n",i,remoteIP[i].c_str());
+		}
 	}
 
-	buffer = new char[ARTNET_PACKET_SIZE];
+	frameBuffer = new char[ARTNET_PACKET_SIZE*MAX_NUM_UNIVERSES];
 
-	allocateBuffer();
+	allocateFrameBuffer();
 
 	mode = THROUGH;
 	maxNumUniverses=0;
@@ -55,6 +58,7 @@ void ofApp::setup(){
 	bRecording.addListener(this,&ofApp::onRec);
 	bPlaying.addListener(this,&ofApp::onPlay);
 	btnTest.addListener(this,&ofApp::onTest);
+	btnReconnect.addListener(this,&ofApp::onReconnect);
 
 	ofxGuiSetTextPadding(4);
 	ofxGuiSetDefaultWidth(ofGetWindowWidth());
@@ -64,6 +68,7 @@ void ofApp::setup(){
 	gui.add(labelStatus.setup(status));
 	gui.add(bRecording.setup("Rec",false));
 	gui.add(bPlaying.setup("Play",false));
+	gui.add(bThrough.setup("Through",true));
 	gui.add(currentFrame.setup("Frame",0,0,MAX_FRAME_NUM));
 	gui.add(maxFrame.setup("Max Frame",MAX_FRAME_NUM,1,MAX_FRAME_NUM));
 	gui.add(btnTriple.setup("FPSx3"));
@@ -71,13 +76,13 @@ void ofApp::setup(){
 	gui.add(btnNormal.setup("FPSx1"));
 	gui.add(fps.setup("FPS",75,25,100));
 	gui.add(btnTest.setup("TEST"));
-
+	gui.add(btnReconnect.setup("Reconnect"));
 	
 
 
 }
 void ofApp::exit(){
-	releaseBuffer();
+	releaseFrameBuffer();
 }
 
 //--------------------------------------------------------------
@@ -95,13 +100,11 @@ void ofApp::update(){
 	if(mode==PLAY){
 
 		status="PLAY";
-		for(int i=0;i<maxNumUniverses;i++){
-			currentFrame = currentFrame+1;
-			if(currentFrame>maxFrame)
-				currentFrame = 0;
-			sendPacket(frames[currentFrame]);
-		}
-	
+		numUniverses=MAX_NUM_UNIVERSES;
+		currentFrame = currentFrame+1;
+		if(currentFrame>maxFrame-1)
+			currentFrame = 0;
+		sendFrame(frames[currentFrame]);
 	}
 	
 	if(mode==THROUGH || mode==REC){
@@ -111,44 +114,67 @@ void ofApp::update(){
 
 		int ret;
 		numUniverses = 0;
-
+		for(int i=0;i<MAX_NUM_UNIVERSES;i++)
+			bReceive[i] = false;
+		char buffer[ARTNET_PACKET_SIZE];
 
 		while(ret=udpReceiver.Receive(buffer,ARTNET_PACKET_SIZE) >= 0){
 			//parseArtnetDMX(buffer);
-			receivePacket(buffer);
-			sendPacket(buffer);
+			storePacket(buffer);
+			numUniverses++;
+			if(numUniverses>=10)break;
+		}
+
+		if(numUniverses>0){
+
+
+			if(bThrough)
+			sendFrame(frameBuffer);
+		
 
 			if(bRecording){
-				
+			
+				status="REC";
+				storeFrame(frameBuffer,currentFrame);
 				currentFrame = currentFrame+1;
-				if(currentFrame>maxFrame-1){
+				if(currentFrame>maxFrame-1)
 					bRecording=false;
-				}
-				storeFrame(buffer,currentFrame);
-				numUniverses++;
-				if(maxNumUniverses<numUniverses)maxNumUniverses=numUniverses;
-
-			}else status="THROUGH";
-		}		
+				
+			}else{
+				status="THROUGH";
+			}
+		}
 		//printf("%d\n",ofGetElapsedTimeMicros()-start);
 	}
 }
 
-void ofApp::storeFrame(const char* buffer,int frame){
-	memcpy(frames[frame],buffer,ARTNET_PACKET_SIZE);
+void ofApp::storePacket(const char* artnetPacket){
+
+	int universe = getUniverse(artnetPacket);
+	if(universe<MAX_NUM_UNIVERSES){
+		char * dst = frameBuffer + universe* ARTNET_PACKET_SIZE;
+		memcpy(dst,artnetPacket,ARTNET_PACKET_SIZE);
+		bReceive[universe] = true;
+	}
 }
 
-void ofApp::allocateBuffer(){
+void ofApp::storeFrame(char* frameBuffer,int frameNum){
+
+	memcpy(frames[frameNum],frameBuffer,FRAME_SIZE);
+
+}
+
+void ofApp::allocateFrameBuffer(){
 	
 	for(int i=0;i<MAX_FRAME_NUM;i++){
-		char* frame = new char[530];
+		char* frame = new char[FRAME_SIZE];
 		frames.push_back(frame);
 	}
 }
-void ofApp::releaseBuffer(){
+void ofApp::releaseFrameBuffer(){
 	
 	for(int i=0;i<frames.size();i++){
-		delete frames[i];
+		delete [] frames[i];
 	}
 }
 
@@ -188,70 +214,94 @@ int ofApp::getUniverse(const char* artnetPacket){
 
 
 void ofApp::receivePacket(char* artnetPacket){
-	bReceive[getUniverse(buffer)]=true;
+	bReceive[getUniverse(frameBuffer)]=true;
 }
 
-void ofApp::sendPacket(char* artnetPacket){
+void ofApp::sendPacket(int index,char* packet){
 	
-	char buffer[ARTNET_PACKET_SIZE];
-	memcpy(buffer,artnetPacket,ARTNET_PACKET_SIZE);
-	int universe = getUniverse(buffer);
-	int index = universe/2 ;
-	int sendUniverse = universe%2;
-	buffer[14] = sendUniverse ;
-	udpSender[index].SendAll(buffer,ARTNET_PACKET_SIZE);
-	bSend[universe]=true;
+	udpSender[index].SendAll((char*)packet,PACKET_SIZE);
+	bSend[index]=true;
+
+}
+void ofApp::sendFrame(char * frameBuffer){
+
+	unsigned char *buffer = new unsigned char [PACKET_SIZE];
+
+	int firstLen = ARTNET_PACKET_SIZE-ART_DMX_START-2;
+	int secondLen = PACKET_SIZE-firstLen;
+
+	for(int i=0;i<numUniverses;i++){
+
+		int sendTo = i/2;
+
+		if(i%2==0){ // universe 0,2,4,6,8
+			char *src =(char*)frameBuffer+i*ARTNET_PACKET_SIZE+ART_DMX_START;
+			memcpy(buffer,src,firstLen);
+		}else{ //universe  1,3,5,7,9
+		    char *src = (char*)frameBuffer+i*ARTNET_PACKET_SIZE+ART_DMX_START;
+			memcpy(buffer+firstLen,src,secondLen);
+			sendPacket(sendTo,(char*)buffer);
+			//for(int i=0;i<NUM_LEDS;i++){
+			//	printf("DATA:%d R:%d G:%d B:%d\n",i,buffer[i*3],buffer[i*3+1],buffer[i*3+2]);
+			//}
+		}
+	};
+
+	delete [] buffer;
+
 }
 
-void ofApp::sendTestPacket(int universe,ofColor color){
+void ofApp::sendTestPacket(int index,ofColor color){
 	
-	char artnetPacket[ARTNET_PACKET_SIZE];
-
-	// packetID is "Art-Net"
-	for (int i = 0 ; i < 9 ; i++)
-		artnetPacket[i] = ART_NET_ID[i];
+	char buffer[PACKET_SIZE];
 	
-	//opcode
-	artnetPacket[8] = (char)(ART_DMX & 0xff00) ;
-	artnetPacket[9] = (char)((ART_DMX & 0x00ff) >> 8);
-	//sequence
-	artnetPacket[12]= 0;
-	//universe
-	artnetPacket[14]= (char)(universe & 0xff00);
-	artnetPacket[15]= (char)(universe & 0x00ff) >> 8;
-	
-	//
-	artnetPacket[17] = (char)512 & 0x00ff;
-	artnetPacket[18] = (char)((512 & 0xff00) >> 8);
-
-	for(int i=ART_DMX_START;i<=512;i++){
-		
-		char v;
-		if(i%3==0)v=color.r;
-		else if(i%3==1)v=color.g;
-		else if(i%3==2)v=color.b;
-
-		artnetPacket[i]=v;
+	for(int i=0;i<PACKET_SIZE;i+=3){
+		buffer[i]=color.r;
+		buffer[i+1]=color.g;
+		buffer[i+2]=color.b;
 	}
-	
-	sendPacket(artnetPacket);
+	numUniverses=10;
+	sendPacket(index,buffer);
 
-	for(int i=0;i<ART_DMX_START-1;i++){
-		printf("[%d] %x\n",i,artnetPacket[i]);
-	}
-
-	//for(int i=ART_DMX_START;i<ARTNET_PACKET_SIZE;i++){
-	//	printf("[%d] %x\n",i,artnetPacket[i]);
-	//}
+	printf("LED BORAD[%d] R%d G%d B%d\n",index,color.r,color.g,color.b);
 }
 
 void ofApp::onTest(){
 
-	sendTestPacket(0,ofColor(30,30,30));
+	for(int i=0;i<NUM_REMOTE_DEVICES;i++){
+		sendTestPacket(i,ofColor(30,30,30));
+		ofSleepMillis(500);
+		sendTestPacket(i,ofColor(0,0,0));
+	}
+}
 
-	//for(int i=0;i<10;i++){
-	//	sendTestPacket(i,ofColor(30,30,30));
-	//}
+void ofApp::onReconnect(){
+
+	//Receiver Setup
+	if(!udpReceiver.Create()){
+		printf("UDP Receiver Error:INVALID SOCKET\n");
+	};
+	if(udpReceiver.Bind(ARTNET_PORT)<0){
+		printf("UDP Error:can't bind\n");
+	};
+	udpReceiver.SetNonBlocking(true);
+
+	printf("UDP Receive Buffer Size:%d\n",udpReceiver.GetReceiveBufferSize());
+
+	//Sender Setup
+	for(int i=0;i<NUM_REMOTE_DEVICES;i<i++){
+		if(!udpSender[i].Create()){
+			printf("UDP Sender[%d] Error:INVALID SOCKET\n",i);
+		}
+		else if(udpSender[i].Connect(remoteIP[i].c_str(),ARTNET_PORT)){;
+			udpSender[i].SetNonBlocking(true);	
+			printf("UDP Sender[%d] Connected to:%s\n",i,remoteIP[i].c_str());
+		}else{
+			printf("UDP Sender[%d] can't connect to:%s\n",i,remoteIP[i].c_str());
+		}
+	}
+
+
 }
 
 //--------------------------------------------------------------
@@ -260,16 +310,16 @@ void ofApp::draw(){
 	ofBackground(ofColor(0,0,0));
 
 	for(int i=0;i<MAX_NUM_UNIVERSES;i++){
-
 		if(bReceive[i])ofSetColor(ofColor(0,0,200));
-		else ofSetColor(ofColor(30));
+		else ofSetColor(ofColor(50));
 		ofCircle(ofPoint(15*(i+1),15*1),5);
-
-		if(bSend[i])ofSetColor(ofColor(0,200,0));
-		else ofSetColor(ofColor(30));
-		ofCircle(ofPoint(15*(i+1),15*2),5);
-		
 	}
+
+	for(int i=0;i<NUM_REMOTE_DEVICES;i++){
+		if(bSend[i])ofSetColor(ofColor(0,200,0));
+		else ofSetColor(ofColor(50));
+		ofCircle(ofPoint(15*(i+1),15*2),5);
+	}		
 	
 	gui.draw();
 	
@@ -303,6 +353,7 @@ void ofApp::onPlay(bool &bPlay){
 	if(bPlay){
 		mode=PLAY;
 		currentFrame.setFillColor(ofColor(0,200,0));
+		currentFrame = 0;
 
 	}else{
 		mode=THROUGH;
