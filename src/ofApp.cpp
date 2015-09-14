@@ -72,12 +72,14 @@ void ofApp::setup(){
 
 	gui.setup();
 	gui.setPosition(0,60);
-	gui.add(labelStatus.setup(status));
-	gui.add(bRecording.setup("Rec",false));
-	gui.add(bPlaying.setup("Play",false));
-	gui.add(bThrough.setup("Through",true));
-	gui.add(bPause.setup("Pause",false));
-	gui.add(currentFrame.setup("Frame",0,0,MAX_FRAME_NUM));
+
+	gui.add(guiPB.setup("Playback"));
+	guiPB.add(labelStatus.setup(status));
+	guiPB.add(bRecording.setup("Rec",false));
+	guiPB.add(bPlaying.setup("Play",false));
+	guiPB.add(bThrough.setup("Through",true));
+	guiPB.add(bPause.setup("Pause",false));
+	guiPB.add(currentFrame.setup("Frame",0,0,MAX_FRAME_NUM));
 	gui.add(maxFrame.setup("Max Frame",MAX_FRAME_NUM,1,MAX_FRAME_NUM));
 	gui.add(bright.setup("Bright",255,0,255));
 	gui.add(btnTriple.setup("FPSx3"));
@@ -86,8 +88,6 @@ void ofApp::setup(){
 	gui.add(fps.setup("FPS",75,25,100));
 	gui.add(btnTest.setup("TEST"));
 	gui.add(btnReconnect.setup("Reconnect"));
-	
-
 
 }
 void ofApp::exit(){
@@ -293,8 +293,9 @@ void ofApp::onTest(){
 void ofApp::onReconnect(){
 
 	//Receiver Setup
-	if(!udpReceiver.Create()){
-		printf("UDP Receiver Error:INVALID SOCKET\n");
+	if(!udpReceiver.Close()){
+		udpReceiver.Create();
+		printf("UDP Receiver :Create SOCKET\n");
 	};
 	if(udpReceiver.Bind(ARTNET_PORT)<0){
 		printf("UDP Error:can't bind\n");
@@ -305,10 +306,11 @@ void ofApp::onReconnect(){
 
 	//Sender Setup
 	for(int i=0;i<NUM_REMOTE_DEVICES;i<i++){
-		if(!udpSender[i].Create()){
-			printf("UDP Sender[%d] Error:INVALID SOCKET\n",i);
+		if(!udpSender[i].Close()){
+			udpSender[i].Create();
+			printf("UDP Sender[%d] :Create SOCKET\n",i);
 		}
-		else if(udpSender[i].Connect(remoteIP[i].c_str(),ARTNET_PORT)){;
+		if(udpSender[i].Connect(remoteIP[i].c_str(),ARTNET_PORT)){;
 			udpSender[i].SetNonBlocking(true);	
 			printf("UDP Sender[%d] Connected to:%s\n",i,remoteIP[i].c_str());
 		}else{
@@ -327,13 +329,13 @@ void ofApp::draw(){
 	for(int i=0;i<MAX_NUM_UNIVERSES;i++){
 		if(bReceive[i])ofSetColor(ofColor(0,0,200));
 		else ofSetColor(ofColor(50));
-		ofCircle(ofPoint(15*(i+1),15*1),5);
+		ofCircle(ofPoint(20*(i+1),20*1),8);
 	}
 
 	for(int i=0;i<NUM_REMOTE_DEVICES;i++){
 		if(bSend[i])ofSetColor(ofColor(0,200,0));
 		else ofSetColor(ofColor(50));
-		ofCircle(ofPoint(15*(i+1),15*2),5);
+		ofCircle(ofPoint(20*(i+1),20*2),8);
 	}		
 	
 	gui.draw();

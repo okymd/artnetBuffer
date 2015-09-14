@@ -99,6 +99,7 @@ class ofApp : public ofBaseApp{
 		
 	//GUI
 		ofxPanel gui;
+		ofxGuiGroup guiPB;
 		ofxToggle bRecording;
 		ofxToggle bPlaying;
 		ofxToggle bThrough;
@@ -109,6 +110,7 @@ class ofApp : public ofBaseApp{
 		ofxButton btnTest;
 		ofxButton btnReconnect;
 		
+
 		ofxLabel  labelStatus;
 		
 
