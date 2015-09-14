@@ -4,7 +4,7 @@
 #include "ofxUdpManager.h"
 #include "ofxXmlSettings.h"
 #include "ofxGui.h"
-
+#include "ofxOsc.h"
 
 #define ART_NET_ID "Art-Net\0"
 #define ART_DMX 0x5000
@@ -19,10 +19,12 @@ static const unsigned int NUM_LEDS = 192;
 static const unsigned int PACKET_SIZE = NUM_LEDS * 3;// for Arduino packet size
 static const int NUM_REMOTE_DEVICES = 5;
 
-
 //
 static const int MAX_NUM_UNIVERSES = NUM_REMOTE_DEVICES*2;
-		
+	
+//OSC 
+static const string HOST  = "localhost";
+static const int OSC_PORT = 2256;
 
 class ofApp : public ofBaseApp{
 
@@ -93,12 +95,14 @@ class ofApp : public ofBaseApp{
 		ofxIntSlider currentFrame;
 		ofxIntSlider maxFrame;
 		ofxIntSlider fps;
+		ofxIntSlider bright;
 		
 	//GUI
 		ofxPanel gui;
 		ofxToggle bRecording;
 		ofxToggle bPlaying;
 		ofxToggle bThrough;
+		ofxToggle bPause;
 		ofxButton btnTriple;
 		ofxButton btnDouble;
 		ofxButton btnNormal;
@@ -112,11 +116,18 @@ class ofApp : public ofBaseApp{
 		void onRec(bool &bRec);
 		void onPlay(bool &bPlay);
 		void onChangeFPS(int &val);
+		void onChangeBright(int &bval);
 		void onTriple(){ fps=75;ofSetFrameRate(fps);};
 		void onDouble(){ fps=50;ofSetFrameRate(fps);};
 		void onNormal(){ fps=25;ofSetFrameRate(fps);};
 		void onTest();
 		void onReconnect();
+
+
+	//OSC
+		ofxOscSender oscSender[NUM_REMOTE_DEVICES];
+		
+		
 
 
 		

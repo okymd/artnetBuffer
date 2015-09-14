@@ -43,6 +43,11 @@ void ofApp::setup(){
 		}
 	}
 
+	//Osc Sender Setup
+	for(int i=0;i<NUM_REMOTE_DEVICES;i++){
+		oscSender[i].setup(remoteIP[i].c_str(),OSC_PORT);
+	}
+
 	frameBuffer = new char[ARTNET_PACKET_SIZE*MAX_NUM_UNIVERSES];
 
 	allocateFrameBuffer();
@@ -55,6 +60,8 @@ void ofApp::setup(){
 	btnDouble.addListener(this,&ofApp::onDouble);
 	btnNormal.addListener(this,&ofApp::onNormal);
 	fps.addListener(this,&ofApp::onChangeFPS);
+	bright.addListener(this,&ofApp::onChangeBright);
+
 	bRecording.addListener(this,&ofApp::onRec);
 	bPlaying.addListener(this,&ofApp::onPlay);
 	btnTest.addListener(this,&ofApp::onTest);
@@ -69,8 +76,10 @@ void ofApp::setup(){
 	gui.add(bRecording.setup("Rec",false));
 	gui.add(bPlaying.setup("Play",false));
 	gui.add(bThrough.setup("Through",true));
+	gui.add(bPause.setup("Pause",false));
 	gui.add(currentFrame.setup("Frame",0,0,MAX_FRAME_NUM));
 	gui.add(maxFrame.setup("Max Frame",MAX_FRAME_NUM,1,MAX_FRAME_NUM));
+	gui.add(bright.setup("Bright",255,0,255));
 	gui.add(btnTriple.setup("FPSx3"));
 	gui.add(btnDouble.setup("FPSx2"));
 	gui.add(btnNormal.setup("FPSx1"));
@@ -101,6 +110,7 @@ void ofApp::update(){
 
 		status="PLAY";
 		numUniverses=MAX_NUM_UNIVERSES;
+		if(!bPause)
 		currentFrame = currentFrame+1;
 		if(currentFrame>maxFrame-1)
 			currentFrame = 0;
@@ -136,6 +146,7 @@ void ofApp::update(){
 			
 				status="REC";
 				storeFrame(frameBuffer,currentFrame);
+				if(!bPause)
 				currentFrame = currentFrame+1;
 				if(currentFrame>maxFrame-1)
 					bRecording=false;
@@ -218,6 +229,10 @@ void ofApp::receivePacket(char* artnetPacket){
 }
 
 void ofApp::sendPacket(int index,char* packet){
+
+	for(int i=0;i<PACKET_SIZE;i++){
+		packet[i]= (unsigned char)((unsigned char)packet[i]*bright/255.0);
+	}
 	
 	udpSender[index].SendAll((char*)packet,PACKET_SIZE);
 	bSend[index]=true;
@@ -368,8 +383,39 @@ void ofApp::onChangeFPS(int &val){
 	ofSetFrameRate(val);
 }
 
+void ofApp::onChangeBright(int &val){
+	
+	for(int i=0;i<NUM_REMOTE_DEVICES;i++){
+		ofxOscMessage msg;
+		msg.setAddress("/bright");
+		msg.addIntArg(val);
+		oscSender[i].sendMessage(msg);
+	}
+	printf("Brightness %d\n",val);
+}
+
 //--------------------------------------------------------------
 void ofApp::keyPressed(int key){
+
+	switch(key){
+	
+	case 'q':
+		maxFrame = maxFrame-1;
+		break;
+	case 'w':
+		maxFrame = maxFrame+1;
+		break;
+	case 'p':
+		bPause = !bPause;
+		break;
+	case 's':
+		currentFrame = currentFrame+1;
+		break;
+	case 'a':
+		currentFrame = currentFrame-1;
+		break;
+	
+	}
 
 
 }
