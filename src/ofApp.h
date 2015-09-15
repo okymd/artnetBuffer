@@ -53,14 +53,11 @@ class ofApp : public ofBaseApp{
 
 		
 				
-		unsigned int numUniverses;
-		unsigned int maxNumUniverses;
-		 
-
+		unsigned int numRecvUniverses;
+	
 		enum {
 			REC,
 			PLAY,
-			THROUGH
 		};
 		int mode;
 
@@ -93,7 +90,8 @@ class ofApp : public ofBaseApp{
 		ofParameter<int> lastFrame;
 		ofParameter<string> status;
 		ofxIntSlider currentFrame;
-		ofxIntSlider maxFrame;
+		ofxIntSlider endFrame;
+		ofxIntSlider startFrame;
 		ofxIntSlider fps;
 		ofxIntSlider bright;
 		
@@ -119,9 +117,9 @@ class ofApp : public ofBaseApp{
 		void onPlay(bool &bPlay);
 		void onChangeFPS(int &val);
 		void onChangeBright(int &bval);
-		void onTriple(){ fps=75;ofSetFrameRate(fps);};
-		void onDouble(){ fps=50;ofSetFrameRate(fps);};
-		void onNormal(){ fps=25;ofSetFrameRate(fps);};
+		void onTriple(){ fps=75;};
+		void onDouble(){ fps=50;};
+		void onNormal(){ fps=25;};
 		void onTest();
 		void onReconnect();
 

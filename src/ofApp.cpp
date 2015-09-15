@@ -3,22 +3,12 @@
 
 ////Arduino IP's
 const string remoteIP[NUM_REMOTE_DEVICES] ={
-	"192.168.1.200",
-	"192.168.1.201",
-	"192.168.1.202",
-	"192.168.1.203",
-	"192.168.1.204"
+	"192.168.11.200",
+	"192.168.11.201",
+	"192.168.11.202",
+	"192.168.11.203",
+	"192.168.11.204"
 };
-
-////Arduino IP's
-//const string remoteIP[5] ={
-//	"192.168.0.200",
-//	"192.168.0.201",
-//	"192.168.0.202",
-//	"192.168.0.203",
-//	"192.168.0.204"
-//};
-
 
 //--------------------------------------------------------------
 void ofApp::setup(){
@@ -52,8 +42,8 @@ void ofApp::setup(){
 
 	allocateFrameBuffer();
 
-	mode = THROUGH;
-	maxNumUniverses=0;
+	mode = REC;
+	
 
 	//gui setup
 	btnTriple.addListener(this,&ofApp::onTriple);
@@ -73,14 +63,14 @@ void ofApp::setup(){
 	gui.setup();
 	gui.setPosition(0,60);
 
-	gui.add(guiPB.setup("Playback"));
-	guiPB.add(labelStatus.setup(status));
-	guiPB.add(bRecording.setup("Rec",false));
-	guiPB.add(bPlaying.setup("Play",false));
-	guiPB.add(bThrough.setup("Through",true));
-	guiPB.add(bPause.setup("Pause",false));
-	guiPB.add(currentFrame.setup("Frame",0,0,MAX_FRAME_NUM));
-	gui.add(maxFrame.setup("Max Frame",MAX_FRAME_NUM,1,MAX_FRAME_NUM));
+	gui.add(labelStatus.setup(status));
+	gui.add(bRecording.setup("Rec",false));
+	gui.add(bPlaying.setup("Play",false));
+	gui.add(bThrough.setup("Through",true));
+	gui.add(bPause.setup("Pause",false));
+	gui.add(currentFrame.setup("Frame",0,0,MAX_FRAME_NUM));
+	gui.add(startFrame.setup("Start Frame",0,0,MAX_FRAME_NUM));
+	gui.add(endFrame.setup("End Frame",MAX_FRAME_NUM,1,MAX_FRAME_NUM));
 	gui.add(bright.setup("Bright",255,0,255));
 	gui.add(btnTriple.setup("FPSx3"));
 	gui.add(btnDouble.setup("FPSx2"));
@@ -88,6 +78,18 @@ void ofApp::setup(){
 	gui.add(fps.setup("FPS",75,25,100));
 	gui.add(btnTest.setup("TEST"));
 	gui.add(btnReconnect.setup("Reconnect"));
+
+
+	//Slider
+	ofColor dark = ofColor(0);
+	ofColor light = ofColor(120);
+//	startFrame.setBackgroundColor(light);
+//	startFrame.setFillColor(dark);
+//	startFrame.setBorderColor(light);
+//	endFrame.setBackgroundColor(dark);
+//	endFrame.setFillColor(light);
+//	endFrame.setBorderColor(light);
+
 
 }
 void ofApp::exit(){
@@ -109,21 +111,22 @@ void ofApp::update(){
 	if(mode==PLAY){
 
 		status="PLAY";
-		numUniverses=MAX_NUM_UNIVERSES;
+		numRecvUniverses=MAX_NUM_UNIVERSES;
 		if(!bPause)
 		currentFrame = currentFrame+1;
-		if(currentFrame>maxFrame-1)
-			currentFrame = 0;
+		if(currentFrame>endFrame-1)
+			currentFrame = startFrame;
 		sendFrame(frames[currentFrame]);
 	}
 	
-	if(mode==THROUGH || mode==REC){
+	if(mode==REC){
 
 		//start=ofGetElapsedTimeMicros();
 		//status = "No Art-net receive";
 
 		int ret;
-		numUniverses = 0;
+		numRecvUniverses = 0;
+
 		for(int i=0;i<MAX_NUM_UNIVERSES;i++)
 			bReceive[i] = false;
 		char buffer[ARTNET_PACKET_SIZE];
@@ -131,11 +134,11 @@ void ofApp::update(){
 		while(ret=udpReceiver.Receive(buffer,ARTNET_PACKET_SIZE) >= 0){
 			//parseArtnetDMX(buffer);
 			storePacket(buffer);
-			numUniverses++;
-			if(numUniverses>=10)break;
+			numRecvUniverses++;
+			if(numRecvUniverses>MAX_NUM_UNIVERSES)break;
 		}
 
-		if(numUniverses>0){
+		if(numRecvUniverses>0){
 
 
 			if(bThrough)
@@ -148,8 +151,7 @@ void ofApp::update(){
 				storeFrame(frameBuffer,currentFrame);
 				if(!bPause)
 				currentFrame = currentFrame+1;
-				if(currentFrame>maxFrame-1)
-					bRecording=false;
+				if(currentFrame>MAX_FRAME_NUM)bRecording=false;
 				
 			}else{
 				status="THROUGH";
@@ -245,7 +247,8 @@ void ofApp::sendFrame(char * frameBuffer){
 	int firstLen = ARTNET_PACKET_SIZE-ART_DMX_START-2;
 	int secondLen = PACKET_SIZE-firstLen;
 
-	for(int i=0;i<numUniverses;i++){
+
+	for(int i=0;i<numRecvUniverses;i++){
 
 		int sendTo = i/2;
 
@@ -275,7 +278,7 @@ void ofApp::sendTestPacket(int index,ofColor color){
 		buffer[i+1]=color.g;
 		buffer[i+2]=color.b;
 	}
-	numUniverses=10;
+	numRecvUniverses=10;
 	sendPacket(index,buffer);
 
 	printf("LED BORAD[%d] R%d G%d B%d\n",index,color.r,color.g,color.b);
@@ -344,19 +347,15 @@ void ofApp::draw(){
 
 void ofApp::onRec(bool &bRec){
 
-	
-
 	//on Recoding
 	if(bRec){
 		mode=REC;
+		currentFrame = 0;
 		currentFrame.setFillColor(ofColor(200,0,0));
-
 	}else{
-		mode=THROUGH;
 		currentFrame.setFillColor(ofColor(120));
-		int max = currentFrame;
-		maxFrame = max;
-		currentFrame=0;
+		endFrame = (int)currentFrame;
+		currentFrame = (int)startFrame;
 	}
 
 	if(bPlaying)bPlaying=false;
@@ -370,12 +369,12 @@ void ofApp::onPlay(bool &bPlay){
 	if(bPlay){
 		mode=PLAY;
 		currentFrame.setFillColor(ofColor(0,200,0));
-		currentFrame = 0;
+		currentFrame = startFrame;
 
 	}else{
-		mode=THROUGH;
+		mode=REC;
 		currentFrame.setFillColor(ofColor(120));
-		currentFrame=0;
+		currentFrame=startFrame;
 	}
 }
 
@@ -402,10 +401,10 @@ void ofApp::keyPressed(int key){
 	switch(key){
 	
 	case 'q':
-		maxFrame = maxFrame-1;
+		endFrame = startFrame-1;
 		break;
 	case 'w':
-		maxFrame = maxFrame+1;
+		endFrame = startFrame+1;
 		break;
 	case 'p':
 		bPause = !bPause;
@@ -416,7 +415,12 @@ void ofApp::keyPressed(int key){
 	case 'a':
 		currentFrame = currentFrame-1;
 		break;
-	
+	case 'z':
+		endFrame = endFrame-1;
+		break;
+	case 'x':
+		endFrame = endFrame+1;
+		break;
 	}
 
 
