@@ -48,7 +48,8 @@ class ofApp : public ofBaseApp{
 
 	public:
 		char * frameBuffer; //
-		ofxUDPManager udpSender[5];
+		char * sendBuffer[NUM_REMOTE_DEVICES];
+		ofxUDPManager udpSender[NUM_REMOTE_DEVICES];
 		ofxUDPManager udpReceiver;
 
 		
@@ -89,6 +90,7 @@ class ofApp : public ofBaseApp{
 	//ofParamer
 		ofParameter<int> lastFrame;
 		ofParameter<string> status;
+		ofParameter<string> currentFps;
 		ofxIntSlider currentFrame;
 		ofxIntSlider endFrame;
 		ofxIntSlider startFrame;
@@ -108,8 +110,11 @@ class ofApp : public ofBaseApp{
 		ofxButton btnTest;
 		ofxButton btnReconnect;
 		
+		ofxToggle bUpdateSendBuf; 
+		
 
 		ofxLabel  labelStatus;
+		ofxLabel  labelFPS;
 		
 
 	//GUI handler
@@ -125,10 +130,12 @@ class ofApp : public ofBaseApp{
 
 
 	//OSC
-		ofxOscSender oscSender[NUM_REMOTE_DEVICES];
-		
-		
+	ofxOscSender oscSender[NUM_REMOTE_DEVICES];
 
 
-		
+	//image mask
+	ofImage sendImg;
+	ofImage maskImg[NUM_REMOTE_DEVICES];		
+	void updateSendPixel();
+	void drawSendPixel(char *sendPixel);
 };

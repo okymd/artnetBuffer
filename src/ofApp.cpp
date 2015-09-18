@@ -13,6 +13,11 @@ const string remoteIP[NUM_REMOTE_DEVICES] ={
 //--------------------------------------------------------------
 void ofApp::setup(){
 
+
+	//Window Position
+	ofSetWindowPosition(10,40);
+
+	
 	//Receiver Setup
 	udpReceiver.Create();
 	if(udpReceiver.Bind(ARTNET_PORT)<0){
@@ -38,8 +43,10 @@ void ofApp::setup(){
 		oscSender[i].setup(remoteIP[i].c_str(),OSC_PORT);
 	}
 
-	frameBuffer = new char[ARTNET_PACKET_SIZE*MAX_NUM_UNIVERSES];
 
+	//Buffer allocate
+	frameBuffer = new char[ARTNET_PACKET_SIZE*MAX_NUM_UNIVERSES];
+	
 	allocateFrameBuffer();
 
 	mode = REC;
@@ -63,6 +70,7 @@ void ofApp::setup(){
 	gui.setup();
 	gui.setPosition(0,60);
 
+	gui.add(labelFPS.setup(currentFps));
 	gui.add(labelStatus.setup(status));
 	gui.add(bRecording.setup("Rec",false));
 	gui.add(bPlaying.setup("Play",false));
@@ -76,8 +84,9 @@ void ofApp::setup(){
 	gui.add(btnDouble.setup("FPSx2"));
 	gui.add(btnNormal.setup("FPSx1"));
 	gui.add(fps.setup("FPS",75,25,100));
-	gui.add(btnTest.setup("TEST"));
+	gui.add(btnTest.setup("LED TEST"));
 	gui.add(btnReconnect.setup("Reconnect"));
+	gui.add(bUpdateSendBuf.setup("Show Send Buffer",false));
 
 
 	//Slider
@@ -91,14 +100,29 @@ void ofApp::setup(){
 //	endFrame.setBorderColor(light);
 
 
+	//pixel
+	sendImg.allocate(24,40,OF_IMAGE_COLOR);
+	for(int i=0;i<NUM_REMOTE_DEVICES;i++){
+		maskImg[i].allocate(24,8,OF_IMAGE_COLOR);
+		maskImg[i].loadImage("mask"+ofToString(i)+".bmp");
+	}
+
+
 }
 void ofApp::exit(){
 	releaseFrameBuffer();
+
+	sendImg.clear();
+	for(int i=0;i<NUM_REMOTE_DEVICES;i++){
+		maskImg[i].clear();
+	}
 }
 
 //--------------------------------------------------------------
 void ofApp::update(){
+
 	ofSetWindowTitle(ofToString(ofGetFrameRate(), 2));
+	currentFps = ofToString(ofGetFrameRate(),2);
 
 
 	static unsigned long start=0;
@@ -115,7 +139,7 @@ void ofApp::update(){
 		if(!bPause)
 		currentFrame = currentFrame+1;
 		if(currentFrame>endFrame-1)
-			currentFrame = startFrame;
+			currentFrame = (int)startFrame;
 		sendFrame(frames[currentFrame]);
 	}
 	
@@ -183,12 +207,20 @@ void ofApp::allocateFrameBuffer(){
 		char* frame = new char[FRAME_SIZE];
 		frames.push_back(frame);
 	}
+
+	for(int i=0;i<NUM_REMOTE_DEVICES;i++)
+		sendBuffer[i] = new char[PACKET_SIZE];
+
 }
 void ofApp::releaseFrameBuffer(){
 	
 	for(int i=0;i<frames.size();i++){
 		delete [] frames[i];
 	}
+
+	for(int i=0;i<NUM_REMOTE_DEVICES;i++)
+		delete sendBuffer[i];
+
 }
 
 
@@ -237,12 +269,15 @@ void ofApp::sendPacket(int index,char* packet){
 	}
 	
 	udpSender[index].SendAll((char*)packet,PACKET_SIZE);
+
+	
 	bSend[index]=true;
 
 }
 void ofApp::sendFrame(char * frameBuffer){
 
 	unsigned char *buffer = new unsigned char [PACKET_SIZE];
+	unsigned char *image = new unsigned char [24*40*3];
 
 	int firstLen = ARTNET_PACKET_SIZE-ART_DMX_START-2;
 	int secondLen = PACKET_SIZE-firstLen;
@@ -259,13 +294,14 @@ void ofApp::sendFrame(char * frameBuffer){
 		    char *src = (char*)frameBuffer+i*ARTNET_PACKET_SIZE+ART_DMX_START;
 			memcpy(buffer+firstLen,src,secondLen);
 			sendPacket(sendTo,(char*)buffer);
-			//for(int i=0;i<NUM_LEDS;i++){
-			//	printf("DATA:%d R:%d G:%d B:%d\n",i,buffer[i*3],buffer[i*3+1],buffer[i*3+2]);
-			//}
+			if(bUpdateSendBuf)memcpy(sendBuffer[sendTo],buffer,PACKET_SIZE);
 		}
 	};
+	
+	if(bUpdateSendBuf)updateSendPixel();
 
 	delete [] buffer;
+	delete [] image;
 
 }
 
@@ -327,6 +363,8 @@ void ofApp::onReconnect(){
 //--------------------------------------------------------------
 void ofApp::draw(){
 
+	
+
 	ofBackground(ofColor(0,0,0));
 
 	for(int i=0;i<MAX_NUM_UNIVERSES;i++){
@@ -340,9 +378,47 @@ void ofApp::draw(){
 		else ofSetColor(ofColor(50));
 		ofCircle(ofPoint(20*(i+1),20*2),8);
 	}		
+
+	
 	
 	gui.draw();
+
+	if(bUpdateSendBuf)drawSendPixel(sendBuffer[0]);
+}
+
+void ofApp::drawSendPixel(char * sendPixel){
+
+
+	int dx=10;
+	int dy=10;
+	int w = 24;
+	int h = 8;
 	
+	for(int y=0;y<h;y++){
+		for(int x=0;x<w;x++){
+			char r =sendPixel[3*(x+y*w)];
+			char g =sendPixel[3*(x+y*w)+1];
+			char b =sendPixel[3*(x+y*w)+2];
+			ofSetColor(ofColor(r,g,b));
+			ofRect(dx*x,dy*y,dx,dy);
+		}
+	}
+
+}
+
+
+void ofApp::updateSendPixel(){
+
+	char* temp = new char[PACKET_SIZE*NUM_REMOTE_DEVICES];
+
+	for(int i=0;i<NUM_REMOTE_DEVICES;i++){
+		memcpy(temp+i*PACKET_SIZE,sendBuffer[i],PACKET_SIZE);
+	}
+
+	sendImg.setFromPixels((const unsigned char*)temp,24,40,OF_IMAGE_COLOR);
+
+	delete temp;
+
 }
 
 void ofApp::onRec(bool &bRec){
@@ -369,12 +445,12 @@ void ofApp::onPlay(bool &bPlay){
 	if(bPlay){
 		mode=PLAY;
 		currentFrame.setFillColor(ofColor(0,200,0));
-		currentFrame = startFrame;
+		currentFrame = (int)startFrame;
 
 	}else{
 		mode=REC;
 		currentFrame.setFillColor(ofColor(120));
-		currentFrame=startFrame;
+		currentFrame=(int)startFrame;
 	}
 }
 
@@ -386,13 +462,13 @@ void ofApp::onChangeFPS(int &val){
 
 void ofApp::onChangeBright(int &val){
 	
-	for(int i=0;i<NUM_REMOTE_DEVICES;i++){
-		ofxOscMessage msg;
-		msg.setAddress("/bright");
-		msg.addIntArg(val);
-		oscSender[i].sendMessage(msg);
-	}
-	printf("Brightness %d\n",val);
+	//for(int i=0;i<NUM_REMOTE_DEVICES;i++){
+	//	ofxOscMessage msg;
+	//	msg.setAddress("/bright");
+	//	msg.addIntArg(val);
+	//	oscSender[i].sendMessage(msg);
+	//}
+	//printf("Brightness %d\n",val);
 }
 
 //--------------------------------------------------------------
