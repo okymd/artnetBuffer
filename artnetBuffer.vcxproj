@@ -106,6 +106,7 @@
     <ClCompile Include="..\..\..\addons\ofxOsc\src\ofxOscParameterSync.cpp" />
     <ClCompile Include="..\..\..\addons\ofxOsc\src\ofxOscReceiver.cpp" />
     <ClCompile Include="..\..\..\addons\ofxOsc\src\ofxOscSender.cpp" />
+    <ClCompile Include="maskController.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\ofApp.cpp" />
     <ClCompile Include="..\..\..\addons\ofxGui\src\ofxBaseGui.cpp" />
@@ -146,6 +147,7 @@
     <ClInclude Include="..\..\..\addons\ofxOsc\src\ofxOscParameterSync.h" />
     <ClInclude Include="..\..\..\addons\ofxOsc\src\ofxOscReceiver.h" />
     <ClInclude Include="..\..\..\addons\ofxOsc\src\ofxOscSender.h" />
+    <ClInclude Include="maskController.h" />
     <ClInclude Include="src\ofApp.h" />
     <ClInclude Include="..\..\..\addons\ofxGui\src\ofxBaseGui.h" />
     <ClInclude Include="..\..\..\addons\ofxGui\src\ofxButton.h" />

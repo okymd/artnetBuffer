@@ -89,7 +89,6 @@ class ofApp : public ofBaseApp{
 
 	//ofParamer
 		ofParameter<int> lastFrame;
-		ofParameter<string> status;
 		ofParameter<string> currentFps;
 		ofxIntSlider currentFrame;
 		ofxIntSlider endFrame;
@@ -110,7 +109,8 @@ class ofApp : public ofBaseApp{
 		ofxButton btnTest;
 		ofxButton btnReconnect;
 		
-		ofxToggle bUpdateSendBuf; 
+		ofxToggle bShowMask; 
+		ofxToggle bApplyMask;
 		
 
 		ofxLabel  labelStatus;
@@ -134,8 +134,19 @@ class ofApp : public ofBaseApp{
 
 
 	//image mask
+	ofxLabel maskStatus;
 	ofImage sendImg;
-	ofImage maskImg[NUM_REMOTE_DEVICES];		
+	ofImage maskImg[NUM_REMOTE_DEVICES];
+	int currentShowMask;
 	void updateSendPixel();
-	void drawSendPixel(char *sendPixel);
+	void drawPixel(char *pixel);
+	void doMask(char * src,char* mask,char* dst);
+	//active Pixel
+	int getActive(int x,int y);
+	int activePixel;
+
+	//draw Help
+	ofTrueTypeFont font;
+	void drawKeymap();
+
 };

@@ -1,6 +1,5 @@
 #include "ofApp.h"
 
-
 ////Arduino IP's
 const string remoteIP[NUM_REMOTE_DEVICES] ={
 	"192.168.11.200",
@@ -10,12 +9,19 @@ const string remoteIP[NUM_REMOTE_DEVICES] ={
 	"192.168.11.204"
 };
 
+const string DEVICE_ID[5] = {"A","B","C","D","E" };
+
+//
+const int HEADER_HEIGHT = 60;
+
 //--------------------------------------------------------------
 void ofApp::setup(){
 
 
 	//Window Position
 	ofSetWindowPosition(10,40);
+	ofSetWindowTitle("Artnet Buffer for Matr");
+
 
 	
 	//Receiver Setup
@@ -68,10 +74,10 @@ void ofApp::setup(){
 	ofxGuiSetDefaultWidth(ofGetWindowWidth());
 
 	gui.setup();
-	gui.setPosition(0,60);
+	gui.setPosition(0,HEADER_HEIGHT);
 
-	gui.add(labelFPS.setup(currentFps));
-	gui.add(labelStatus.setup(status));
+	gui.add(labelFPS.setup("FPS:","FPS"));
+	gui.add(labelStatus.setup("STATUS:","NO SIGNAL"));
 	gui.add(bRecording.setup("Rec",false));
 	gui.add(bPlaying.setup("Play",false));
 	gui.add(bThrough.setup("Through",true));
@@ -80,13 +86,15 @@ void ofApp::setup(){
 	gui.add(startFrame.setup("Start Frame",0,0,MAX_FRAME_NUM));
 	gui.add(endFrame.setup("End Frame",MAX_FRAME_NUM,1,MAX_FRAME_NUM));
 	gui.add(bright.setup("Bright",255,0,255));
+	gui.add(fps.setup("FPS",75,25,100));
 	gui.add(btnTriple.setup("FPSx3"));
 	gui.add(btnDouble.setup("FPSx2"));
-	gui.add(btnNormal.setup("FPSx1"));
-	gui.add(fps.setup("FPS",75,25,100));
+	gui.add(btnNormal.setup("FPSx1"));	
 	gui.add(btnTest.setup("LED TEST"));
 	gui.add(btnReconnect.setup("Reconnect"));
-	gui.add(bUpdateSendBuf.setup("Show Send Buffer",false));
+	gui.add(bShowMask.setup("Show Mask",false));
+	gui.add(bApplyMask.setup("Apply Mask",true));
+	gui.add(maskStatus.setup("Display","Mask status"));
 
 
 	//Slider
@@ -106,6 +114,10 @@ void ofApp::setup(){
 		maskImg[i].allocate(24,8,OF_IMAGE_COLOR);
 		maskImg[i].loadImage("mask"+ofToString(i)+".bmp");
 	}
+	currentShowMask=0;
+
+
+	font.loadFont("verdana.ttf", 8);
 
 
 }
@@ -121,8 +133,7 @@ void ofApp::exit(){
 //--------------------------------------------------------------
 void ofApp::update(){
 
-	ofSetWindowTitle(ofToString(ofGetFrameRate(), 2));
-	currentFps = ofToString(ofGetFrameRate(),2);
+	labelFPS = ofToString(ofGetFrameRate(),2);
 
 
 	static unsigned long start=0;
@@ -134,7 +145,7 @@ void ofApp::update(){
 
 	if(mode==PLAY){
 
-		status="PLAY";
+		labelStatus="PLAY";
 		numRecvUniverses=MAX_NUM_UNIVERSES;
 		if(!bPause)
 		currentFrame = currentFrame+1;
@@ -166,20 +177,23 @@ void ofApp::update(){
 
 
 			if(bThrough)
-			sendFrame(frameBuffer);
-		
+				sendFrame(frameBuffer);
+			else labelStatus="";
+
 
 			if(bRecording){
 			
-				status="REC";
+				labelStatus="REC";
 				storeFrame(frameBuffer,currentFrame);
 				if(!bPause)
 				currentFrame = currentFrame+1;
 				if(currentFrame>MAX_FRAME_NUM)bRecording=false;
 				
 			}else{
-				status="THROUGH";
+				labelStatus="THROUGH";
 			}
+		}else{
+			labelStatus="---";
 		}
 		//printf("%d\n",ofGetElapsedTimeMicros()-start);
 	}
@@ -293,16 +307,27 @@ void ofApp::sendFrame(char * frameBuffer){
 		}else{ //universe  1,3,5,7,9
 		    char *src = (char*)frameBuffer+i*ARTNET_PACKET_SIZE+ART_DMX_START;
 			memcpy(buffer+firstLen,src,secondLen);
+
+			//send Packet
+			if(bApplyMask)
+				doMask((char*)buffer,(char*)maskImg[sendTo].getPixels(),(char*)buffer);
 			sendPacket(sendTo,(char*)buffer);
-			if(bUpdateSendBuf)memcpy(sendBuffer[sendTo],buffer,PACKET_SIZE);
+			memcpy(sendBuffer[sendTo],buffer,PACKET_SIZE);
 		}
 	};
 	
-	if(bUpdateSendBuf)updateSendPixel();
+	updateSendPixel();
 
 	delete [] buffer;
 	delete [] image;
 
+}
+
+void ofApp::doMask(char * src,char* mask,char* dst){
+
+	for(int i=0;i<PACKET_SIZE;i++){
+		dst[i] = src[i] & mask[i];
+	}
 }
 
 void ofApp::sendTestPacket(int index,ofColor color){
@@ -367,6 +392,7 @@ void ofApp::draw(){
 
 	ofBackground(ofColor(0,0,0));
 
+	ofPushStyle();
 	for(int i=0;i<MAX_NUM_UNIVERSES;i++){
 		if(bReceive[i])ofSetColor(ofColor(0,0,200));
 		else ofSetColor(ofColor(50));
@@ -378,17 +404,31 @@ void ofApp::draw(){
 		else ofSetColor(ofColor(50));
 		ofCircle(ofPoint(20*(i+1),20*2),8);
 	}		
-
+	ofPopStyle();
 	
 	
 	gui.draw();
 
-	if(bUpdateSendBuf)drawSendPixel(sendBuffer[0]);
+
+	ofTranslate(0,gui.getPosition().y+gui.getShape().height);
+	if(bShowMask){		
+		drawPixel((char*)maskImg[currentShowMask].getPixels());
+		maskStatus = DEVICE_ID[currentShowMask] + ":Mask Image";
+	}else{
+		drawPixel(sendBuffer[currentShowMask]);
+		if(bApplyMask)maskStatus = DEVICE_ID[currentShowMask] + ":Masked Pixel";
+		else maskStatus = DEVICE_ID[currentShowMask] + ":Not Masked Pixel";
+	}
+
+	ofTranslate(0,10*10);
+	drawKeymap();
 }
 
-void ofApp::drawSendPixel(char * sendPixel){
+void ofApp::drawPixel(char * pixel){
 
+	
 
+	ofPushStyle();
 	int dx=10;
 	int dy=10;
 	int w = 24;
@@ -396,13 +436,29 @@ void ofApp::drawSendPixel(char * sendPixel){
 	
 	for(int y=0;y<h;y++){
 		for(int x=0;x<w;x++){
-			char r =sendPixel[3*(x+y*w)];
-			char g =sendPixel[3*(x+y*w)+1];
-			char b =sendPixel[3*(x+y*w)+2];
+			char r =pixel[3*(x+y*w)];
+			char g =pixel[3*(x+y*w)+1];
+			char b =pixel[3*(x+y*w)+2];
 			ofSetColor(ofColor(r,g,b));
+			if(x+24*y==activePixel){
+				ofSetColor(ofColor(255,!g,!b));
+			}
 			ofRect(dx*x,dy*y,dx,dy);
 		}
 	}
+	ofPopStyle();
+	ofPushStyle();
+	ofSetLineWidth(1);
+	ofSetColor(ofColor(40));
+	for(int y=0;y<h+1;y++){
+		ofLine(0,dy*y,dx*w,dy*y);
+	}
+	for(int x=0;x<w+1;x++){
+		ofLine(dx*x,0,dx*x,dy*h);
+	}
+	ofPopStyle();
+
+
 
 }
 
@@ -471,16 +527,32 @@ void ofApp::onChangeBright(int &val){
 	//printf("Brightness %d\n",val);
 }
 
+
+void ofApp::drawKeymap(){
+
+	ofSetColor(ofColor(200));
+
+	string keys = "[KEY MAP]\n";
+	keys +="q/w:start Frame\n";
+	keys +="a/s:current Frame\n";
+	keys +="z/x:end Frame\n";
+	keys +="p:PAUSE\n";
+	keys +="UP/DOWN: change show device\n";
+
+	font.drawString(keys,0,0);
+
+}
+
 //--------------------------------------------------------------
 void ofApp::keyPressed(int key){
 
 	switch(key){
 	
 	case 'q':
-		endFrame = startFrame-1;
+		startFrame = startFrame-1;
 		break;
 	case 'w':
-		endFrame = startFrame+1;
+		startFrame = startFrame+1;
 		break;
 	case 'p':
 		bPause = !bPause;
@@ -497,9 +569,43 @@ void ofApp::keyPressed(int key){
 	case 'x':
 		endFrame = endFrame+1;
 		break;
+
+	case OF_KEY_DOWN:
+		currentShowMask++;
+		if(currentShowMask>NUM_REMOTE_DEVICES-1)
+			currentShowMask=0;
+		maskImg[currentShowMask].loadImage("mask"+ofToString(currentShowMask)+".bmp");
+		break;
+	case OF_KEY_UP:
+		currentShowMask--;
+		if(currentShowMask<0)
+			currentShowMask=NUM_REMOTE_DEVICES-1;
+		maskImg[currentShowMask].loadImage("mask"+ofToString(currentShowMask)+".bmp");
+		break;
+
 	}
 
 
+}
+
+int ofApp::getActive(int x,int y){
+
+	int org_x=0;
+	int org_y=gui.getHeight()+gui.getPosition().y;
+	int dx=10;
+	int dy=10;
+
+
+	for(int i=0;i<NUM_LEDS;i++){
+		int _x = i%24;
+		int _y = i/24;
+		ofRectangle pixRect = ofRectangle(_x*dx+org_x,_y*dy+org_y,dx,dy);
+		if(pixRect.inside(x,y)){
+			return i;
+		};	
+	}
+
+	return -1;
 }
 
 //--------------------------------------------------------------
@@ -511,6 +617,7 @@ void ofApp::keyReleased(int key){
 //--------------------------------------------------------------
 void ofApp::mouseMoved(int x, int y ){
 
+	activePixel=getActive(x,y);
 }
 
 //--------------------------------------------------------------
@@ -520,7 +627,22 @@ void ofApp::mouseDragged(int x, int y, int button){
 
 //--------------------------------------------------------------
 void ofApp::mousePressed(int x, int y, int button){
-
+	int i=getActive(x,y);
+	if(i>=0){
+		int size = 24*8*3;
+		char* buf= new char[size];
+		activePixel=i;
+		memcpy(buf,(char*)maskImg[currentShowMask].getPixels(),size);
+		//set color
+		int p= activePixel*3;
+		if(buf[p]!=0)memset(&buf[p],0,3);
+		else memset(&buf[p],255,3);
+		//replace
+		maskImg[currentShowMask].setFromPixels((const unsigned char*)buf,24,8,OF_IMAGE_COLOR);
+		//save bitmap
+		maskImg[currentShowMask].saveImage("mask"+ofToString(currentShowMask)+".bmp");
+		delete[] buf;
+	}
 }
 
 //--------------------------------------------------------------
